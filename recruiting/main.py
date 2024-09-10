@@ -1,81 +1,8 @@
-import http.server
-import json
+from flask import Flask, request, jsonify
+from functools import wraps
 import re
-from urllib.parse import urlparse, parse_qs
-from http import HTTPStatus
 
-# Starter messages
-starter_message_user_info = """
-Thanks for interviewing with Bland! 
-This endpoint is designed to test your ability to interact with customer API's.
-
-We encourage the use of external tools like Postman to test this endpoint.
-
-This endpoint is a POST request and requires the following:
-
-POST https://us.api.bland.ai/recruiting/exampleApi/get-user-info
-
-1. Headers:
-   - 'bland-api-key': A valid Bland API key (required)
-   - 'Content-Type': application/json (required)
-
-2. Request Body (JSON):
-   - 'first_name': String, all lowercase, only letters (required)
-   - 'last_name': String, all lowercase, only letters (required)
-
-Example request:
-POST /get-user-info
-{
-  "first_name": "john",
-  "last_name": "doe"
-}
-
-Possible error responses:
-- 401: Missing or invalid API key
-- 400: Missing or incorrectly formatted first_name or last_name
-
-A successful response will return user information if found.
-"""
-
-starter_message_book_appointment = """
-This endpoint is a POST request for booking appointment times. 
-
-We encourage the use of external tools like Postman to test this endpoint.
-
-POST https://us.api.bland.ai/recruiting/exampleApi/book-appointment
-
-This endpoint requires the following:
-
-1. Headers:
-   - 'bland-api-key': A valid Bland API key (required)
-   - 'Content-Type': application/json (required)
-
-2. Request Body (JSON):
-   - 'first_name': String, all lowercase, only letters (required)
-   - 'last_name': String, all lowercase, only letters (required)
-   - 'interview_date': String, format DD-MM-YYYY (required)
-   - 'interview_time': String, format HH:MM in 24-hour time (required)
-
-Example request:
-POST /book-appointment
-{
-  "first_name": "john",
-  "last_name": "doe",
-  "interview_date": "15-06-2023",
-  "interview_time": "14:30"
-}
-
-Possible error responses:
-- 401: Missing or invalid API key
-- 400: Missing or incorrectly formatted first_name, last_name, interview_date, or interview_time
-
-A successful response will confirm the appointment booking.
-"""
-
-error_message = """
-It seems like an error has occurred - either you're not on the right track and have managed to break this endpoint
-or something is wrong with the endpoint itself. Please reach out to simon@bland.ai if you are certain that your request should be working.
-"""
+app = Flask(__name__)
 
 # Helper functions
 def check_name_format(name):
@@ -88,123 +15,81 @@ def check_time_format(time):
     return bool(re.match(r'^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$', time))
 
 def validate_api_key(api_key):
-    # Simulating API key validation
-    return api_key == "valid_api_key"
+    # Check if the API key starts with "sk-"
+    return bool(api_key and api_key.startswith("sk-"))
 
-class BlandHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        parsed_path = urlparse(self.path)
-        if parsed_path.path == '/get-user-info':
-            self.send_response(HTTPStatus.OK)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            response = json.dumps({"error": "STARTING_ERROR", "message": starter_message_user_info})
-            self.wfile.write(response.encode())
-        elif parsed_path.path == '/book-appointment':
-            self.send_response(HTTPStatus.OK)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            response = json.dumps({"error": "STARTING_ERROR_APPOINTMENT", "message": starter_message_book_appointment})
-            self.wfile.write(response.encode())
-        else:
-            self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+# Decorator for API key validation
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('bland-api-key')
+        if not validate_api_key(api_key):
+            return jsonify({"error": "INVALID_API_KEY", "message": "The API key provided is invalid or missing. It should start with 'sk-'."}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
-    def do_POST(self):
-        content_length = int(self.headers['Content-Length'])
-        post_data = self.rfile.read(content_length)
-        parsed_path = urlparse(self.path)
+@app.route('/get-user-info', methods=['GET'])
+def get_user_info_start():
+    return jsonify({
+        "message": "This endpoint is for getting user info. Use POST method with 'first_name' and 'last_name' in the request body. Remember to include your API key starting with 'sk-' in the 'bland-api-key' header."
+    })
 
-        try:
-            body = json.loads(post_data.decode('utf-8'))
-        except json.JSONDecodeError:
-            self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON")
-            return
+@app.route('/get-user-info', methods=['POST'])
+@require_api_key
+def get_user_info():
+    data = request.json
+    first_name = data.get('first_name')
+    last_name = data.get('last_name')
 
-        bland_api_key = self.headers.get('bland-api-key')
-        content_type = self.headers.get('Content-Type')
+    if not first_name or not last_name:
+        return jsonify({"error": "MISSING_FIELDS", "message": "Both first_name and last_name are required"}), 400
 
-        if not bland_api_key:
-            self.send_error(HTTPStatus.UNAUTHORIZED, "Missing API key")
-            return
+    if not check_name_format(first_name) or not check_name_format(last_name):
+        return jsonify({"error": "INVALID_NAME_FORMAT", "message": "Names must be all lowercase letters"}), 400
 
-        if content_type != 'application/json':
-            self.send_error(HTTPStatus.BAD_REQUEST, "Invalid Content-Type")
-            return
-
-        if not validate_api_key(bland_api_key):
-            self.send_error(HTTPStatus.UNAUTHORIZED, "Invalid API key")
-            return
-
-        if parsed_path.path == '/get-user-info':
-            self.handle_get_user_info(body)
-        elif parsed_path.path == '/book-appointment':
-            self.handle_book_appointment(body)
-        else:
-            self.send_error(HTTPStatus.NOT_FOUND, "Not found")
-
-    def handle_get_user_info(self, body):
-        first_name = body.get('first_name')
-        last_name = body.get('last_name')
-
-        if not first_name or not last_name:
-            self.send_error(HTTPStatus.BAD_REQUEST, "Missing first_name or last_name")
-            return
-
-        if not check_name_format(first_name) or not check_name_format(last_name):
-            self.send_error(HTTPStatus.BAD_REQUEST, "Invalid name format")
-            return
-
-        response = {
-            "jobId": "1234567890",
-            "jobTitle": "Support Engineer",
-            "jobDescription": "Support Engineering at Bland",
-            "applicantInformation": {
-                "applicationId": "1234567890",
-                "firstName": first_name,
-                "lastName": last_name,
-                "email": f"{first_name}@bland.ai",
-                "dateApplied": "2023-09-09T00:00:00Z",
-                "phone_number": "+1 131 255 0123",
-                "linkedin_url": f"https://www.linkedin.com/in/{first_name}-bland-0000000000",
-            }
+    return jsonify({
+        "jobId": "1234567890",
+        "jobTitle": "Support Engineer",
+        "jobDescription": "Support Engineering at Bland",
+        "applicantInformation": {
+            "applicationId": "1234567890",
+            "firstName": first_name,
+            "lastName": last_name,
+            "email": f"{first_name}@bland.ai",
+            "dateApplied": "2023-09-09T00:00:00Z",
+            "phone_number": "+1 131 255 0123",
+            "linkedin_url": f"https://www.linkedin.com/in/{first_name}-bland-0000000000",
         }
+    })
 
-        self.send_response(HTTPStatus.OK)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps(response).encode())
+@app.route('/book-appointment', methods=['GET'])
+def book_appointment_start():
+    return jsonify({
+        "message": "This endpoint is for booking appointments. Use POST method with 'first_name', 'last_name', 'interview_date', and 'interview_time' in the request body. Remember to include your API key starting with 'sk-' in the 'bland-api-key' header."
+    })
 
-    def handle_book_appointment(self, body):
-        first_name = body.get('first_name')
-        last_name = body.get('last_name')
-        interview_date = body.get('interview_date')
-        interview_time = body.get('interview_time')
+@app.route('/book-appointment', methods=['POST'])
+@require_api_key
+def book_appointment():
+    data = request.json
+    first_name = data.get('first_name')
+    last_name = data.get('last_name')
+    interview_date = data.get('interview_date')
+    interview_time = data.get('interview_time')
 
-        if not all([first_name, last_name, interview_date, interview_time]):
-            self.send_error(HTTPStatus.BAD_REQUEST, "Missing required fields")
-            return
+    if not all([first_name, last_name, interview_date, interview_time]):
+        return jsonify({"error": "MISSING_FIELDS", "message": "All fields are required"}), 400
 
-        if not check_name_format(first_name) or not check_name_format(last_name):
-            self.send_error(HTTPStatus.BAD_REQUEST, "Invalid name format")
-            return
+    if not check_name_format(first_name) or not check_name_format(last_name):
+        return jsonify({"error": "INVALID_NAME_FORMAT", "message": "Names must be all lowercase letters"}), 400
 
-        if not check_date_format(interview_date):
-            self.send_error(HTTPStatus.BAD_REQUEST, "Invalid date format")
-            return
+    if not check_date_format(interview_date):
+        return jsonify({"error": "INVALID_DATE_FORMAT", "message": "Date must be in DD-MM-YYYY format"}), 400
 
-        if not check_time_format(interview_time):
-            self.send_error(HTTPStatus.BAD_REQUEST, "Invalid time format")
-            return
+    if not check_time_format(interview_time):
+        return jsonify({"error": "INVALID_TIME_FORMAT", "message": "Time must be in HH:MM 24-hour format"}), 400
 
-        response = {"status": "success"}
+    return jsonify({"status": "success", "message": "Appointment booked successfully"})
 
-        self.send_response(HTTPStatus.OK)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps(response).encode())
-
-if __name__ == "__main__":
-    server_address = ('', 8000)
-    httpd = http.server.HTTPServer(server_address, BlandHandler)
-    print("Server running on port 8000")
-    httpd.serve_forever()
+if __name__ == '__main__':
+    app.run(debug=True)
