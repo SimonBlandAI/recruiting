@@ -15,23 +15,23 @@ def check_time_format(time):
     return bool(re.match(r'^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$', time))
 
 def validate_api_key(api_key):
-    # Check if the API key starts with "sk-"
-    return bool(api_key and api_key.startswith("sk-"))
+    # Simulating API key validation
+    return api_key == "valid_api_key"
 
 # Decorator for API key validation
 def require_api_key(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         api_key = request.headers.get('bland-api-key')
-        if not validate_api_key(api_key):
-            return jsonify({"error": "INVALID_API_KEY", "message": "The API key provided is invalid or missing. It should start with 'sk-'."}), 401
+        if not api_key or not validate_api_key(api_key):
+            return jsonify({"error": "INVALID_API_KEY", "message": "The API key provided is invalid or missing"}), 401
         return f(*args, **kwargs)
     return decorated_function
 
 @app.route('/get-user-info', methods=['GET'])
 def get_user_info_start():
     return jsonify({
-        "message": "This endpoint is for getting user info. Use POST method with 'first_name' and 'last_name' in the request body. Remember to include your API key starting with 'sk-' in the 'bland-api-key' header."
+        "message": "This endpoint is for getting user info. Use POST method with 'first_name' and 'last_name' in the request body."
     })
 
 @app.route('/get-user-info', methods=['POST'])
@@ -65,7 +65,7 @@ def get_user_info():
 @app.route('/book-appointment', methods=['GET'])
 def book_appointment_start():
     return jsonify({
-        "message": "This endpoint is for booking appointments. Use POST method with 'first_name', 'last_name', 'interview_date', and 'interview_time' in the request body. Remember to include your API key starting with 'sk-' in the 'bland-api-key' header."
+        "message": "This endpoint is for booking appointments. Use POST method with 'first_name', 'last_name', 'interview_date', and 'interview_time' in the request body."
     })
 
 @app.route('/book-appointment', methods=['POST'])
