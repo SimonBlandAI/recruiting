@@ -16,7 +16,7 @@ def check_time_format(time):
 
 def validate_api_key(api_key):
     # Simulating API key validation
-    return api_key == "valid_api_key"
+    return api_key.startswith("sk-")
 
 # Decorator for API key validation
 def require_api_key(f):
