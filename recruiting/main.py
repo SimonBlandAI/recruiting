@@ -62,7 +62,7 @@ def check_time_format(time):
     return bool(re.match(r'^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$', time))
 
 def validate_api_key(api_key):
-    return api_key.startswith("sk-") || api_key.startswith("org_")
+    return api_key.startswith("sk-") or api_key.startswith("org_")
 
 def require_api_key(f):
     @wraps(f)
